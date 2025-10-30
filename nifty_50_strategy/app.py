@@ -57,25 +57,28 @@ def main():
     elif app_mode == "Backtesting":
         st.header("Backtesting")
 
-        if st.button("Fetch 20 Years of Data from Yahoo Finance"):
-            with st.spinner("Fetching data..."):
+        if st.button("Load or Fetch 20 Years of Data"):
+            with st.spinner("Accessing data... This may take a moment the first time."):
                 start_date = (datetime.now() - timedelta(days=20*365)).strftime('%Y-%m-%d')
                 end_date = datetime.now().strftime('%Y-%m-%d')
-                price_data, vol_data, error = fetch_data_from_yahoo(start_date, end_date)
+                price_data, vol_data, message = fetch_data_from_yahoo(start_date, end_date)
 
-                if error and not (price_data is not None and vol_data is None):
-                    st.error(error)
-                else:
-                    if price_data is not None:
+                if message and "cache" in message:
+                    st.success(message)
+                elif message:
+                    st.warning(message)
+
+                if price_data is not None:
+                    if price_data.index.tz is not None:
                         price_data.index = price_data.index.tz_localize(None)
-                    if vol_data is not None:
+                    if vol_data is not None and vol_data.index.tz is not None:
                         vol_data.index = vol_data.index.tz_localize(None)
 
                     st.session_state.price_data = price_data
                     st.session_state.vol_data = vol_data
-                    st.success("Data fetched successfully!")
-                    if error:
-                        st.warning(error)
+                    st.success("Data is ready!")
+                else:
+                    st.error(message) # Show download error
 
         if st.session_state.price_data is not None:
             st.subheader("Select Date Range for Backtest")

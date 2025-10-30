@@ -2,61 +2,68 @@
 import yfinance as yf
 import pandas as pd
 import time
+import os
+from datetime import datetime, timedelta
+
+CACHE_DIR = "data_cache"
+PRICE_CACHE_FILE = os.path.join(CACHE_DIR, "price_data.csv")
+VOL_CACHE_FILE = os.path.join(CACHE_DIR, "vol_data.csv")
 
 def fetch_data_from_yahoo(start_date, end_date):
     """
-    Fetches historical price data for Nifty 50 and volatility data for India VIX
-    from Yahoo Finance in a single API call, with a retry mechanism.
+    Fetches historical data from Yahoo Finance, using a local cache to avoid
+    redownloading recent data.
     """
-    for attempt in range(3): # Try up to 3 times
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
+    # Check if cached files exist and are recent (less than 1 day old)
+    cache_is_valid = False
+    if os.path.exists(PRICE_CACHE_FILE):
+        last_mod_time = os.path.getmtime(PRICE_CACHE_FILE)
+        if (time.time() - last_mod_time) / 3600 < 24:
+            cache_is_valid = True
+
+    if cache_is_valid:
+        try:
+            price_data = pd.read_csv(PRICE_CACHE_FILE, index_col='timestamp', parse_dates=True)
+            vol_data = pd.read_csv(VOL_CACHE_FILE, index_col='Date', parse_dates=True)['Close']
+            return price_data, vol_data, "Loaded data from cache."
+        except Exception:
+            # If cache is invalid or corrupt, proceed to download
+            pass
+
+    # --- If cache is not valid, download from Yahoo Finance ---
+    for attempt in range(3):
         try:
             tickers = "^NSEI ^INDIAVIX"
             data = yf.download(tickers, start=start_date, end=end_date, interval='1d')
 
-            if data.empty or '^NSEI' not in data.columns.get_level_values(1):
-                return None, None, "No Nifty 50 data found for the selected date range."
+            if data.empty or ('^NSEI' not in data.columns.get_level_values(1) and len(data.columns) > 1):
+                return None, None, "No Nifty 50 data found."
 
-            # Extract Nifty 50 data
-            nifty_data = data.loc[:, (slice(None), '^NSEI')]
-            nifty_data.columns = nifty_data.columns.droplevel(1)
-            nifty_data.rename(columns={
-                'Open': 'open', 'High': 'high', 'Low': 'low',
-                'Close': 'close', 'Volume': 'volume'
-            }, inplace=True)
-            nifty_data.index.name = 'timestamp'
+            # Extract and save price data
+            price_data = data.loc[:, (slice(None), '^NSEI')]
+            price_data.columns = price_data.columns.droplevel(1)
+            price_data.rename(columns={'Open': 'open', 'High': 'high', 'Low': 'low', 'Close': 'close', 'Volume': 'volume'}, inplace=True)
+            price_data.index.name = 'timestamp'
+            price_data.to_csv(PRICE_CACHE_FILE)
 
-            # Extract India VIX data
+            # Extract and save volatility data
             vol_data = None
+            error_msg = None
             if '^INDIAVIX' in data.columns.get_level_values(1):
                 vol_data = data.loc[:, ('Close', '^INDIAVIX')].rename('Close')
                 vol_data.index.name = 'Date'
-
-            error_msg = None
-            if vol_data is None or vol_data.empty:
+                vol_data.to_csv(VOL_CACHE_FILE)
+            else:
                 error_msg = "Nifty 50 data fetched, but no India VIX data found."
 
-            return nifty_data, vol_data, error_msg
+            return price_data, vol_data, error_msg
 
         except Exception as e:
             if "YFRateLimitError" in str(e) and attempt < 2:
-                time.sleep(5) # Wait 5 seconds before retrying
+                time.sleep(5)
                 continue
-            return None, None, f"An error occurred after {attempt+1} attempts: {e}"
+            return None, None, f"An error occurred: {e}"
+
     return None, None, "Failed to fetch data after multiple attempts."
-
-
-if __name__ == '__main__':
-    # Example usage
-    start = '2023-01-01'
-    end = '2024-01-01'
-    price_data, vol_data, error = fetch_data_from_yahoo(start, end)
-    if error and not (price_data is not None and vol_data is None):
-        print(error)
-    else:
-        print("Nifty 50 Data:")
-        print(price_data.head())
-        if vol_data is not None:
-            print("\nIndia VIX Data:")
-            print(vol_data.head())
-        if error:
-            print(f"\nNote: {error}")
