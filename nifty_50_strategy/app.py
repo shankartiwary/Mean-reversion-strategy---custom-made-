@@ -62,6 +62,9 @@ def main():
                 if error:
                     st.error(error)
                 else:
+                    # Convert index to tz-naive to match the slider's output
+                    if price_data is not None:
+                        price_data.index = price_data.index.tz_localize(None)
                     st.session_state.price_data = price_data
                     st.session_state.vol_data = vol_data
                     st.success("Data fetched successfully!")
