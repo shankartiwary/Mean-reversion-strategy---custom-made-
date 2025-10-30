@@ -3,6 +3,9 @@ import pandas as pd
 from strategy import MeanReversionStrategy
 
 def backtest(data, strategy):
+    # Calculate indicators for the entire dataset at once
+    data = strategy.calculate_indicators(data)
+
     in_trade = False
     entry_price = 0
     stop_loss = 0
@@ -10,19 +13,21 @@ def backtest(data, strategy):
     trades = []
 
     for i in range(1, len(data)):
-        current_data = data.iloc[:i]
-        signal = strategy.generate_signals(current_data)
-
-        latest_candle = current_data.iloc[-1]
+        latest_candle = data.iloc[i]
         current_price = latest_candle['close']
         ema = latest_candle['ema']
+
+        # Generate signal based on the previous candle's data
+        signal = strategy.generate_signals(data.iloc[:i])
 
         if not in_trade and (signal == 'BUY' or signal == 'SELL'):
             in_trade = True
             entry_price = current_price
             trade_direction = signal
-            volatility = 16  # Placeholder for volatility
-            stop_loss_value = strategy.get_stop_loss(current_data, volatility)
+            # In backtesting, we'd ideally have historical VIX data.
+            # For simplicity, we'll use a placeholder or an average.
+            volatility = 16
+            stop_loss_value = strategy.get_stop_loss(data.iloc[:i], volatility)
             if signal == 'BUY':
                 stop_loss = entry_price - stop_loss_value
             else: # SELL
@@ -46,7 +51,6 @@ def backtest(data, strategy):
 
 def main():
     # Load historical data from a CSV file
-    # Make sure to have a 'nifty_50_data.csv' file in the same directory
     try:
         data = pd.read_csv('nifty_50_strategy/nifty_50_data.csv', index_col='timestamp', parse_dates=True)
     except FileNotFoundError:

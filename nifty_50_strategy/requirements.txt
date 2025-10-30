@@ -5,3 +5,5 @@ pandas-ta
 pyotp
 logzero
 websocket-client
+streamlit
+nsepy
