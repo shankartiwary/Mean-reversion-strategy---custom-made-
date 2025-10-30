@@ -15,6 +15,7 @@ def main():
     if 'bot' not in st.session_state:
         st.session_state.log_queue = queue.Queue()
         st.session_state.bot = TradingBot(st.session_state.log_queue)
+        st.session_state.logs = ""
 
     st.sidebar.title("Navigation")
     app_mode = st.sidebar.selectbox("Choose the app mode", ["Live Trading", "Backtesting"])
@@ -40,22 +41,22 @@ def main():
 
         st.header("Logs")
         log_container = st.empty()
-        logs = ""
         while not st.session_state.log_queue.empty():
-            logs += st.session_state.log_queue.get() + "\n"
+            st.session_state.logs += st.session_state.log_queue.get() + "\n"
 
-        log_container.text_area("Live Logs", logs, height=300)
+        log_container.text_area("Live Logs", st.session_state.logs, height=300)
 
         time.sleep(1)
         st.rerun()
 
     elif app_mode == "Backtesting":
+        # --- Backtesting UI ---
         st.header("Backtesting")
 
         if st.button("Fetch Last 2 Years of Data from Yahoo Finance"):
             with st.spinner("Fetching data..."):
-                # Fetch last 2 years of data; more may trigger rate limits for 1h interval
-                start_date = (datetime.now() - timedelta(days=2*365)).strftime('%Y-%m-%d')
+                # Fetch last 729 days of data to stay safely within Yahoo's 730-day limit for 1h interval
+                start_date = (datetime.now() - timedelta(days=729)).strftime('%Y-%m-%d')
                 end_date = datetime.now().strftime('%Y-%m-%d')
                 price_data, vol_data, error = fetch_data_from_yahoo(start_date, end_date)
                 if error:
@@ -82,7 +83,7 @@ def main():
                 # Filter data based on the selected date range
                 filtered_price_data = st.session_state.price_data[start_range:end_range]
                 filtered_vol_data = None
-                if st.session_state.vol_data is not None:
+                if 'vol_data' in st.session_state and st.session_state.vol_data is not None:
                     filtered_vol_data = st.session_state.vol_data[start_range:end_range]
 
                 strategy = MeanReversionStrategy()
