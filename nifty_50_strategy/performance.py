@@ -44,7 +44,9 @@ def calculate_performance_metrics(trades, price_data):
     # --- Calculate quantstats metrics on strategy returns ---
     sharpe = qs.stats.sharpe(strategy_returns)
     max_drawdown = qs.stats.max_drawdown(strategy_returns)
-    total_return = qs.stats.comp(strategy_returns) * 100
+
+    # Calculate total return by summing PnL of all trades
+    total_return = trades_df['pnl'].sum() * 100
 
     return {
         "Total Return (%)": total_return,
