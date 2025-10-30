@@ -7,6 +7,7 @@ from bot import TradingBot
 from backtest import backtest as run_backtest
 from strategy import MeanReversionStrategy
 from data_fetcher import fetch_data_from_yahoo
+from performance import calculate_performance_metrics
 from datetime import datetime, timedelta
 
 def main():
@@ -54,7 +55,6 @@ def main():
         st.rerun()
 
     elif app_mode == "Backtesting":
-        # --- Backtesting UI ---
         st.header("Backtesting")
 
         if st.button("Fetch Last 2 Years of Data from Yahoo Finance"):
@@ -75,7 +75,7 @@ def main():
                     st.session_state.vol_data = vol_data
                     st.success("Data fetched successfully!")
                     st.info("Using 1-hour data from Yahoo Finance as a proxy for the 4-hour strategy timeframe.")
-                    if error: # For the case where vol_data is None
+                    if error:
                         st.warning(error)
 
         if st.session_state.price_data is not None:
@@ -98,8 +98,24 @@ def main():
 
                 strategy = MeanReversionStrategy()
                 trades = run_backtest(filtered_price_data, strategy, filtered_vol_data)
-                st.write("Backtest Results:")
+
+                st.subheader("Backtest Results")
                 st.dataframe(pd.DataFrame(trades))
+
+                if trades:
+                    metrics = calculate_performance_metrics(trades, filtered_price_data)
+                    st.subheader("Performance Metrics")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Total Return (%)", f"{metrics['Total Return (%)']:.2f}")
+                    col2.metric("Win Ratio (%)", f"{metrics['Win Ratio (%)']:.2f}")
+                    col3.metric("Sharpe Ratio", f"{metrics['Sharpe Ratio']:.2f}")
+
+                    col4, col5, col6 = st.columns(3)
+                    col4.metric("Winning Trades", metrics['Winning Trades'])
+                    col5.metric("Losing Trades", metrics['Losing Trades'])
+                    col6.metric("Max Drawdown", f"{metrics['Max Drawdown']:.2f}")
+
+                    st.metric("Expectancy", f"{metrics['Expectancy']:.4f}")
 
 if __name__ == "__main__":
     main()
