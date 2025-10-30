@@ -18,6 +18,7 @@ def main():
     app_mode = st.sidebar.selectbox("Choose the app mode", ["Live Trading", "Backtesting"])
 
     if app_mode == "Live Trading":
+        # --- Live Trading UI ---
         st.header("API Credentials")
         api_key = st.text_input("API Key", type="password")
         api_secret = st.text_input("API Secret", type="password")
@@ -47,29 +48,37 @@ def main():
         st.rerun()
 
     elif app_mode == "Backtesting":
+        # --- Backtesting UI ---
         st.header("Backtesting")
 
         uploaded_file = st.file_uploader("Upload historical price data (CSV)", type="csv")
         volatility_file = st.file_uploader("Optional: Upload historical volatility data (CSV)", type="csv")
 
         if uploaded_file is not None:
-            data = pd.read_csv(uploaded_file, index_col='timestamp', parse_dates=True)
-            st.write("Price data loaded successfully:")
-            st.write(data.head())
+            try:
+                data = pd.read_csv(uploaded_file, index_col='timestamp', parse_dates=True)
+                st.write("Price data loaded successfully:")
+                st.write(data.head())
 
-            volatility_data = None
-            if volatility_file is not None:
-                volatility_data = pd.read_csv(volatility_file, index_col='Date', parse_dates=True)['Close']
-                st.write("Volatility data loaded successfully:")
-                st.write(volatility_data.head())
-            else:
-                st.warning("No volatility data provided. Backtest will use a default value, which may affect accuracy.")
+                volatility_data = None
+                if volatility_file is not None:
+                    try:
+                        volatility_data = pd.read_csv(volatility_file, index_col='Date', parse_dates=True)['Close']
+                        st.write("Volatility data loaded successfully:")
+                        st.write(volatility_data.head())
+                    except (ValueError, KeyError):
+                        st.error("Volatility CSV is invalid. Please ensure it has a 'Date' and 'Close' column.")
+                else:
+                    st.warning("No volatility data provided. Backtest will use a default value, which may affect accuracy.")
 
-            if st.button("Run Backtest"):
-                strategy = MeanReversionStrategy()
-                trades = run_backtest(data, strategy, volatility_data)
-                st.write("Backtest Results:")
-                st.dataframe(pd.DataFrame(trades))
+                if st.button("Run Backtest"):
+                    strategy = MeanReversionStrategy()
+                    trades = run_backtest(data, strategy, volatility_data)
+                    st.write("Backtest Results:")
+                    st.dataframe(pd.DataFrame(trades))
+            except (ValueError, KeyError):
+                st.error("Price data CSV is invalid. Please ensure it has a 'timestamp' column and the required price columns (open, high, low, close, volume).")
+
 
 if __name__ == "__main__":
     main()

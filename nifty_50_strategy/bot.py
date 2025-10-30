@@ -104,7 +104,8 @@ class TradingBot:
                         entry_price = current_price
                         trade_direction = signal
                         volatility = self.get_live_volatility()
-                        stop_loss_value = self.strategy.get_stop_loss(historical_data, volatility)
+                        atr_value = historical_data['atr'].iloc[-1]
+                        stop_loss_value = self.strategy.get_stop_loss(atr_value, volatility)
                         if signal == 'BUY':
                             stop_loss = entry_price - stop_loss_value
                         else:
