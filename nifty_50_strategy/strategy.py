@@ -4,13 +4,11 @@ import pandas_ta as ta
 import numpy as np
 
 class MeanReversionStrategy:
-    def __init__(self, ema_period=20, rsi_period=14, rsi_overbought=90, rsi_oversold=10, keltner_period=20, keltner_multiplier=2, atr_period=14, std_dev_period=14, std_dev_multiplier=2.5, z_score_period=14):
+    def __init__(self, ema_period=20, rsi_period=14, rsi_overbought=80, rsi_oversold=20, atr_period=14, std_dev_period=14, std_dev_multiplier=2.5, z_score_period=14):
         self.ema_period = ema_period
         self.rsi_period = rsi_period
         self.rsi_overbought = rsi_overbought
         self.rsi_oversold = rsi_oversold
-        self.keltner_period = keltner_period
-        self.keltner_multiplier = keltner_multiplier
         self.atr_period = atr_period
         self.std_dev_period = std_dev_period
         self.std_dev_multiplier = std_dev_multiplier
@@ -20,23 +18,21 @@ class MeanReversionStrategy:
         """Calculates all technical indicators for the backtest."""
         data['log_price'] = np.log(data['close'])
 
-        # Calculate EMA on close prices
+        # Calculate EMA on both close and log prices
         data['ema'] = ta.ema(data['close'], length=self.ema_period)
+        data['ema_log'] = ta.ema(data['log_price'], length=self.ema_period)
 
         # Calculate RSI on log prices
         data['rsi'] = ta.rsi(data['log_price'], length=self.rsi_period)
 
-        # Calculate rolling standard deviation on log prices
+        # --- Corrected Standard Deviation Calculation (in Log Space) ---
         log_std_dev = data['log_price'].rolling(window=self.std_dev_period).std()
-
-        # Calculate Standard Deviation bands (based on EMA of close, not log)
-        data['upper_std_dev'] = data['ema'] + self.std_dev_multiplier * log_std_dev
-        data['lower_std_dev'] = data['ema'] - self.std_dev_multiplier * log_std_dev
+        data['upper_std_dev_log'] = data['ema_log'] + self.std_dev_multiplier * log_std_dev
+        data['lower_std_dev_log'] = data['ema_log'] - self.std_dev_multiplier * log_std_dev
 
         # Calculate Z-score on log prices
         log_mean = data['log_price'].rolling(window=self.z_score_period).mean()
         data['z_score'] = (data['log_price'] - log_mean) / log_std_dev
-        data['z_score'].fillna(0, inplace=True)
 
         # Calculate ATR on regular prices
         data['atr'] = ta.atr(data['high'], data['low'], data['close'], length=self.atr_period)
@@ -66,8 +62,8 @@ class MeanReversionStrategy:
             buy_conditions.append(data['z_score'] < -2)
             sell_conditions.append(data['z_score'] > 2)
         if 'std_dev' in indicators:
-            buy_conditions.append(data['close'] < data['lower_std_dev'])
-            sell_conditions.append(data['close'] > data['upper_std_dev'])
+            buy_conditions.append(data['log_price'] < data['lower_std_dev_log'])
+            sell_conditions.append(data['log_price'] > data['upper_std_dev_log'])
 
         if not buy_conditions:
             data['signal'] = 'HOLD'
@@ -90,8 +86,13 @@ class MeanReversionStrategy:
         buy_signal_series = buy_cond_sum >= required_conditions
         sell_signal_series = sell_cond_sum >= required_conditions
 
-        # Apply signals to the 'signal' column (BUY takes precedence over SELL if both are true)
-        data['signal'] = np.where(buy_signal_series, 'BUY', np.where(sell_signal_series, 'SELL', 'HOLD'))
+        # Refined signal generation with np.select to handle simultaneous signals
+        conditions = [
+            (buy_signal_series) & (~sell_signal_series),  # Buy signal only
+            (sell_signal_series) & (~buy_signal_series), # Sell signal only
+        ]
+        choices = ['BUY', 'SELL']
+        data['signal'] = np.select(conditions, choices, default='HOLD')
 
         return data
 
