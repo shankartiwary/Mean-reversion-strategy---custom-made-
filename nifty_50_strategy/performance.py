@@ -35,9 +35,11 @@ def calculate_performance_metrics(trades, price_data):
     strategy_returns = pd.Series(0, index=daily_prices.index)
 
     for _, trade in trades_df.iterrows():
-        # Simple PnL attribution to the exit day
         if pd.notna(trade['exit_date']):
-             strategy_returns.loc[trade['exit_date'].date()] += trade['pnl']
+            # Normalize exit date to midnight to match the daily returns index
+            exit_day = trade['exit_date'].normalize()
+            if exit_day in strategy_returns.index:
+                strategy_returns.loc[exit_day] += trade['pnl']
 
     # --- Calculate quantstats metrics on strategy returns ---
     sharpe = qs.stats.sharpe(strategy_returns)
