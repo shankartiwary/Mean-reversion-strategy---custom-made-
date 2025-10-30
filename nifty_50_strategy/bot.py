@@ -111,10 +111,11 @@ class TradingBot:
                             stop_loss = entry_price + stop_loss_value
                         self.log(f"Entering {signal} trade at {entry_price} with stop-loss at {stop_loss}")
 
-                time.sleep(10)  # Short sleep for responsiveness
+                # Sleep for 5 minutes. A 4-hour strategy does not need rapid checks.
+                time.sleep(300)
             except Exception as e:
                 self.log(f"An error occurred in trading loop: {e}")
-                time.sleep(10)
+                time.sleep(300)
 
     def _get_historical_data(self, instrument_token, timeframe):
         try:
