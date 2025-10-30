@@ -6,6 +6,8 @@ import time
 from bot import TradingBot
 from backtest import backtest as run_backtest
 from strategy import MeanReversionStrategy
+from data_fetcher import fetch_data_from_yahoo
+from datetime import datetime, timedelta
 
 def main():
     st.title("Nifty 50 Mean Reversion Trading Bot")
@@ -48,37 +50,44 @@ def main():
         st.rerun()
 
     elif app_mode == "Backtesting":
-        # --- Backtesting UI ---
         st.header("Backtesting")
 
-        uploaded_file = st.file_uploader("Upload historical price data (CSV)", type="csv")
-        volatility_file = st.file_uploader("Optional: Upload historical volatility data (CSV)", type="csv")
-
-        if uploaded_file is not None:
-            try:
-                data = pd.read_csv(uploaded_file, index_col='timestamp', parse_dates=True)
-                st.write("Price data loaded successfully:")
-                st.write(data.head())
-
-                volatility_data = None
-                if volatility_file is not None:
-                    try:
-                        volatility_data = pd.read_csv(volatility_file, index_col='Date', parse_dates=True)['Close']
-                        st.write("Volatility data loaded successfully:")
-                        st.write(volatility_data.head())
-                    except (ValueError, KeyError):
-                        st.error("Volatility CSV is invalid. Please ensure it has a 'Date' and 'Close' column.")
+        if st.button("Fetch Data from Yahoo Finance"):
+            with st.spinner("Fetching data..."):
+                start_date = (datetime.now() - timedelta(days=5*365)).strftime('%Y-%m-%d')
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                price_data, vol_data, error = fetch_data_from_yahoo(start_date, end_date)
+                if error:
+                    st.error(error)
                 else:
-                    st.warning("No volatility data provided. Backtest will use a default value, which may affect accuracy.")
+                    st.session_state.price_data = price_data
+                    st.session_state.vol_data = vol_data
+                    st.success("Data fetched successfully!")
+                    st.info("Using 1-hour data from Yahoo Finance as a proxy for the 4-hour strategy timeframe.")
 
-                if st.button("Run Backtest"):
-                    strategy = MeanReversionStrategy()
-                    trades = run_backtest(data, strategy, volatility_data)
-                    st.write("Backtest Results:")
-                    st.dataframe(pd.DataFrame(trades))
-            except (ValueError, KeyError):
-                st.error("Price data CSV is invalid. Please ensure it has a 'timestamp' column and the required price columns (open, high, low, close, volume).")
+        if 'price_data' in st.session_state:
+            st.subheader("Select Date Range for Backtest")
+            min_date = st.session_state.price_data.index.min().to_pydatetime()
+            max_date = st.session_state.price_data.index.max().to_pydatetime()
 
+            start_range, end_range = st.date_input(
+                "Select the date range",
+                (min_date, max_date),
+                min_value=min_date,
+                max_value=max_date
+            )
+
+            if st.button("Run Backtest"):
+                # Filter data based on the selected date range
+                filtered_price_data = st.session_state.price_data[start_range:end_range]
+                filtered_vol_data = None
+                if st.session_state.vol_data is not None:
+                    filtered_vol_data = st.session_state.vol_data[start_range:end_range]
+
+                strategy = MeanReversionStrategy()
+                trades = run_backtest(filtered_price_data, strategy, filtered_vol_data)
+                st.write("Backtest Results:")
+                st.dataframe(pd.DataFrame(trades))
 
 if __name__ == "__main__":
     main()

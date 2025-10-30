@@ -7,3 +7,4 @@ logzero
 websocket-client
 streamlit
 nsepy
+yfinance
