@@ -4,7 +4,7 @@ import pandas_ta as ta
 import numpy as np
 
 class MeanReversionStrategy:
-    def __init__(self, ema_period=20, rsi_period=14, rsi_overbought=90, rsi_oversold=10, keltner_period=20, keltner_multiplier=2, atr_period=14, std_dev_period=20, std_dev_multiplier=2.5, z_score_period=20):
+    def __init__(self, ema_period=20, rsi_period=14, rsi_overbought=90, rsi_oversold=10, keltner_period=20, keltner_multiplier=2, atr_period=14, std_dev_period=14, std_dev_multiplier=2.5, z_score_period=14):
         self.ema_period = ema_period
         self.rsi_period = rsi_period
         self.rsi_overbought = rsi_overbought
@@ -52,15 +52,16 @@ class MeanReversionStrategy:
         return 'HOLD'
 
     def calculate_all_signals(self, data, indicators=['rsi', 'z_score', 'std_dev']):
-        """Calculates the 'signal' column for the entire dataframe."""
+        """Calculates the 'signal' column for the entire dataframe based on flexible logic."""
         data = self.calculate_indicators(data)
 
         buy_conditions = []
         sell_conditions = []
 
         if 'rsi' in indicators:
-            buy_conditions.append(data['rsi'] < self.rsi_oversold)
-            sell_conditions.append(data['rsi'] > self.rsi_overbought)
+            # Ensure RSI is within the valid 0-100 range before applying conditions
+            buy_conditions.append((data['rsi'] < self.rsi_oversold) & (data['rsi'] > 0))
+            sell_conditions.append((data['rsi'] > self.rsi_overbought) & (data['rsi'] < 100))
         if 'z_score' in indicators:
             buy_conditions.append(data['z_score'] < -2)
             sell_conditions.append(data['z_score'] > 2)
@@ -68,17 +69,26 @@ class MeanReversionStrategy:
             buy_conditions.append(data['close'] < data['lower_std_dev'])
             sell_conditions.append(data['close'] > data['upper_std_dev'])
 
-        if not buy_conditions and not sell_conditions:
+        if not buy_conditions:
             data['signal'] = 'HOLD'
             return data
 
-        # Sum of conditions for each row (True=1, False=0)
+        # Sum of conditions met for each row (True=1, False=0)
         buy_cond_sum = sum(c.astype(int) for c in buy_conditions)
         sell_cond_sum = sum(c.astype(int) for c in sell_conditions)
 
-        # Determine signals based on the count of conditions met
-        buy_signal_series = buy_cond_sum >= 2
-        sell_signal_series = sell_cond_sum >= 2
+        # Determine the required number of conditions based on the number of selected indicators
+        num_indicators = len(indicators)
+        if num_indicators == 1:
+            required_conditions = 1
+        elif num_indicators == 2:
+            required_conditions = 2
+        else:  # This handles the case for 3 indicators, requiring any 2 to be met.
+            required_conditions = 2
+
+        # Generate signals based on the dynamic required conditions
+        buy_signal_series = buy_cond_sum >= required_conditions
+        sell_signal_series = sell_cond_sum >= required_conditions
 
         # Apply signals to the 'signal' column (BUY takes precedence over SELL if both are true)
         data['signal'] = np.where(buy_signal_series, 'BUY', np.where(sell_signal_series, 'SELL', 'HOLD'))
