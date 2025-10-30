@@ -86,13 +86,8 @@ class MeanReversionStrategy:
         buy_signal_series = buy_cond_sum >= required_conditions
         sell_signal_series = sell_cond_sum >= required_conditions
 
-        # Refined signal generation with np.select to handle simultaneous signals
-        conditions = [
-            (buy_signal_series) & (~sell_signal_series),  # Buy signal only
-            (sell_signal_series) & (~buy_signal_series), # Sell signal only
-        ]
-        choices = ['BUY', 'SELL']
-        data['signal'] = np.select(conditions, choices, default='HOLD')
+        # Simplified signal generation: BUY takes precedence if conditions ever overlap (they shouldn't)
+        data['signal'] = np.where(buy_signal_series, 'BUY', np.where(sell_signal_series, 'SELL', 'HOLD'))
 
         return data
 
