@@ -57,9 +57,9 @@ def main():
     elif app_mode == "Backtesting":
         st.header("Backtesting")
 
-        if st.button("Fetch Last 2 Years of Data from Yahoo Finance"):
+        if st.button("Fetch 20 Years of Data from Yahoo Finance"):
             with st.spinner("Fetching data..."):
-                start_date = (datetime.now() - timedelta(days=729)).strftime('%Y-%m-%d')
+                start_date = (datetime.now() - timedelta(days=20*365)).strftime('%Y-%m-%d')
                 end_date = datetime.now().strftime('%Y-%m-%d')
                 price_data, vol_data, error = fetch_data_from_yahoo(start_date, end_date)
 
@@ -74,7 +74,6 @@ def main():
                     st.session_state.price_data = price_data
                     st.session_state.vol_data = vol_data
                     st.success("Data fetched successfully!")
-                    st.info("Using 1-hour data from Yahoo Finance as a proxy for the 4-hour strategy timeframe.")
                     if error:
                         st.warning(error)
 

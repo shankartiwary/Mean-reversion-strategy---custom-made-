@@ -11,7 +11,7 @@ def fetch_data_from_yahoo(start_date, end_date):
     for attempt in range(3): # Try up to 3 times
         try:
             tickers = "^NSEI ^INDIAVIX"
-            data = yf.download(tickers, start=start_date, end=end_date, interval='1h')
+            data = yf.download(tickers, start=start_date, end=end_date, interval='1d')
 
             if data.empty or '^NSEI' not in data.columns.get_level_values(1):
                 return None, None, "No Nifty 50 data found for the selected date range."

@@ -70,7 +70,7 @@ class TradingBot:
 
     def _trading_loop(self):
         instrument_token = "99926000"  # NIFTY 50 index token
-        timeframe = "FOUR_HOUR"
+        timeframe = "ONE_DAY"
 
         in_trade = False
         entry_price = 0
@@ -112,11 +112,11 @@ class TradingBot:
                             stop_loss = entry_price + stop_loss_value
                         self.log(f"Entering {signal} trade at {entry_price} with stop-loss at {stop_loss}")
 
-                # Sleep for 5 minutes. A 4-hour strategy does not need rapid checks.
-                time.sleep(300)
+                # Sleep for 24 hours. A daily strategy only needs to run once per day.
+                time.sleep(60 * 60 * 24)
             except Exception as e:
                 self.log(f"An error occurred in trading loop: {e}")
-                time.sleep(300)
+                time.sleep(60 * 60 * 24)
 
     def _get_historical_data(self, instrument_token, timeframe):
         try:
