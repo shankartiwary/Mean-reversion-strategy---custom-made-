@@ -4,7 +4,7 @@ import pandas_ta as ta
 import numpy as np
 
 class MeanReversionStrategy:
-    def __init__(self, ema_period=20, rsi_period=14, rsi_overbought=75, rsi_oversold=25, keltner_period=20, keltner_multiplier=2, atr_period=14, std_dev_period=20, std_dev_multiplier=2.5, z_score_period=20):
+    def __init__(self, ema_period=20, rsi_period=14, rsi_overbought=90, rsi_oversold=10, keltner_period=20, keltner_multiplier=2, atr_period=14, std_dev_period=20, std_dev_multiplier=2.5, z_score_period=20):
         self.ema_period = ema_period
         self.rsi_period = rsi_period
         self.rsi_overbought = rsi_overbought
@@ -16,27 +16,27 @@ class MeanReversionStrategy:
         self.std_dev_multiplier = std_dev_multiplier
         self.z_score_period = z_score_period
 
-    def _get_log_prices(self, data):
-        """Calculates 21-day logarithmic prices."""
-        return np.log(data['close'].tail(21))
-
     def calculate_indicators(self, data):
-        log_prices = self._get_log_prices(data)
+        """Calculates all technical indicators for the backtest."""
+        data['log_price'] = np.log(data['close'])
 
-        # Calculate EMA
+        # Calculate EMA on close prices
         data['ema'] = ta.ema(data['close'], length=self.ema_period)
 
         # Calculate RSI on log prices
-        data['rsi'] = ta.rsi(log_prices, length=self.rsi_period).iloc[-1] if len(log_prices) >= self.rsi_period else np.nan
+        data['rsi'] = ta.rsi(data['log_price'], length=self.rsi_period)
 
-        # Calculate Standard Deviation on log prices
-        log_std_dev = log_prices.rolling(window=self.std_dev_period).std().iloc[-1]
+        # Calculate rolling standard deviation on log prices
+        log_std_dev = data['log_price'].rolling(window=self.std_dev_period).std()
+
+        # Calculate Standard Deviation bands (based on EMA of close, not log)
         data['upper_std_dev'] = data['ema'] + self.std_dev_multiplier * log_std_dev
         data['lower_std_dev'] = data['ema'] - self.std_dev_multiplier * log_std_dev
 
         # Calculate Z-score on log prices
-        log_mean = log_prices.rolling(window=self.z_score_period).mean().iloc[-1]
-        data['z_score'] = (log_prices.iloc[-1] - log_mean) / log_std_dev if log_std_dev > 0 else 0
+        log_mean = data['log_price'].rolling(window=self.z_score_period).mean()
+        data['z_score'] = (data['log_price'] - log_mean) / log_std_dev
+        data['z_score'].fillna(0, inplace=True)
 
         # Calculate ATR on regular prices
         data['atr'] = ta.atr(data['high'], data['low'], data['close'], length=self.atr_period)
@@ -52,6 +52,7 @@ class MeanReversionStrategy:
         return 'HOLD'
 
     def calculate_all_signals(self, data, indicators=['rsi', 'z_score', 'std_dev']):
+        """Calculates the 'signal' column for the entire dataframe."""
         data = self.calculate_indicators(data)
 
         buy_conditions = []
@@ -67,15 +68,20 @@ class MeanReversionStrategy:
             buy_conditions.append(data['close'] < data['lower_std_dev'])
             sell_conditions.append(data['close'] > data['upper_std_dev'])
 
-        # Trigger if at least two conditions are met
-        buy_signal = sum(buy_conditions) >= 2
-        sell_signal = sum(sell_conditions) >= 2
+        if not buy_conditions and not sell_conditions:
+            data['signal'] = 'HOLD'
+            return data
 
-        data['signal'] = 'HOLD'
-        if buy_signal:
-            data.loc[data.index[-1], 'signal'] = 'BUY'
-        elif sell_signal:
-            data.loc[data.index[-1], 'signal'] = 'SELL'
+        # Sum of conditions for each row (True=1, False=0)
+        buy_cond_sum = sum(c.astype(int) for c in buy_conditions)
+        sell_cond_sum = sum(c.astype(int) for c in sell_conditions)
+
+        # Determine signals based on the count of conditions met
+        buy_signal_series = buy_cond_sum >= 2
+        sell_signal_series = sell_cond_sum >= 2
+
+        # Apply signals to the 'signal' column (BUY takes precedence over SELL if both are true)
+        data['signal'] = np.where(buy_signal_series, 'BUY', np.where(sell_signal_series, 'SELL', 'HOLD'))
 
         return data
 
