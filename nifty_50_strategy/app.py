@@ -81,7 +81,14 @@ def main():
                     st.error(message) # Show download error
 
         if st.session_state.price_data is not None:
-            st.subheader("Select Date Range for Backtest")
+            st.subheader("Backtest Configuration")
+
+            indicators = st.multiselect(
+                "Select indicators to combine (choose 1, 2, or 3)",
+                ['RSI', 'Z-Score', 'Standard Deviation'],
+                ['RSI', 'Z-Score', 'Standard Deviation']
+            )
+
             min_date = st.session_state.price_data.index.min().date()
             max_date = st.session_state.price_data.index.max().date()
 
@@ -93,13 +100,20 @@ def main():
             )
 
             if st.button("Run Backtest"):
+                indicator_map = {
+                    'RSI': 'rsi',
+                    'Z-Score': 'z_score',
+                    'Standard Deviation': 'std_dev'
+                }
+                selected_indicators = [indicator_map[i] for i in indicators]
+
                 filtered_price_data = st.session_state.price_data[start_range:end_range]
                 filtered_vol_data = None
                 if st.session_state.vol_data is not None:
                     filtered_vol_data = st.session_state.vol_data.loc[str(start_range):str(end_range)]
 
                 strategy = MeanReversionStrategy()
-                trades = run_backtest(filtered_price_data, strategy, filtered_vol_data)
+                trades = run_backtest(filtered_price_data, strategy, filtered_vol_data, selected_indicators)
 
                 st.subheader("Backtest Results")
                 st.dataframe(pd.DataFrame(trades))

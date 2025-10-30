@@ -87,9 +87,10 @@ class TradingBot:
                     latest_data = historical_data.iloc[-1]
                     current_price = latest_data['close']
                     ema = latest_data['ema']
+                    z_score = latest_data.get('z_score')
 
                     if in_trade:
-                        if self.strategy.get_exit_signal(current_price, ema, trade_direction):
+                        if self.strategy.get_exit_signal(current_price, ema, trade_direction, z_score):
                             self.log(f"Exit signal at {current_price}. Exiting trade.")
                             in_trade = False
                             trade_direction = None

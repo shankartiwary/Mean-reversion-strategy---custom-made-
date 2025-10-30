@@ -2,9 +2,9 @@
 import pandas as pd
 from strategy import MeanReversionStrategy
 
-def backtest(data, strategy, volatility_data=None):
+def backtest(data, strategy, volatility_data=None, indicators=['rsi', 'z_score', 'std_dev']):
     # Pre-calculate all signals
-    data = strategy.calculate_all_signals(data)
+    data = strategy.calculate_all_signals(data, indicators)
 
     in_trade = False
     entry_price = 0
@@ -18,6 +18,7 @@ def backtest(data, strategy, volatility_data=None):
 
         current_price = latest_candle['close']
         ema = latest_candle['ema']
+        z_score = latest_candle.get('z_score')
 
         if not in_trade and (signal == 'BUY' or signal == 'SELL'):
             in_trade = True
@@ -41,7 +42,7 @@ def backtest(data, strategy, volatility_data=None):
             trades.append({'entry_price': entry_price, 'signal': signal, 'entry_date': latest_candle.name, 'stop_loss': stop_loss})
 
         elif in_trade:
-            if strategy.get_exit_signal(current_price, ema, trade_direction):
+            if strategy.get_exit_signal(current_price, ema, trade_direction, z_score):
                 trades[-1]['exit_price'] = current_price
                 trades[-1]['exit_date'] = latest_candle.name
                 in_trade = False

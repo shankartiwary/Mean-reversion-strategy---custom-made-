@@ -16,49 +16,66 @@ class MeanReversionStrategy:
         self.std_dev_multiplier = std_dev_multiplier
         self.z_score_period = z_score_period
 
+    def _get_log_prices(self, data):
+        """Calculates 21-day logarithmic prices."""
+        return np.log(data['close'].tail(21))
+
     def calculate_indicators(self, data):
+        log_prices = self._get_log_prices(data)
+
+        # Calculate EMA
         data['ema'] = ta.ema(data['close'], length=self.ema_period)
-        data['rsi'] = ta.rsi(data['close'], length=self.rsi_period)
-        keltner = ta.kc(data['high'], data['low'], data['close'], length=self.keltner_period, scalar=self.keltner_multiplier, mamode='ema')
-        if keltner is not None and not keltner.empty:
-            data = data.join(keltner)
-        data['std_dev'] = data['close'].rolling(window=self.std_dev_period).std()
-        data['upper_std_dev'] = data['ema'] + self.std_dev_multiplier * data['std_dev']
-        data['lower_std_dev'] = data['ema'] - self.std_dev_multiplier * data['std_dev']
-        data['z_score'] = (data['close'] - data['close'].rolling(window=self.z_score_period).mean()) / data['close'].rolling(window=self.z_score_period).std()
+
+        # Calculate RSI on log prices
+        data['rsi'] = ta.rsi(log_prices, length=self.rsi_period).iloc[-1] if len(log_prices) >= self.rsi_period else np.nan
+
+        # Calculate Standard Deviation on log prices
+        log_std_dev = log_prices.rolling(window=self.std_dev_period).std().iloc[-1]
+        data['upper_std_dev'] = data['ema'] + self.std_dev_multiplier * log_std_dev
+        data['lower_std_dev'] = data['ema'] - self.std_dev_multiplier * log_std_dev
+
+        # Calculate Z-score on log prices
+        log_mean = log_prices.rolling(window=self.z_score_period).mean().iloc[-1]
+        data['z_score'] = (log_prices.iloc[-1] - log_mean) / log_std_dev if log_std_dev > 0 else 0
+
+        # Calculate ATR on regular prices
         data['atr'] = ta.atr(data['high'], data['low'], data['close'], length=self.atr_period)
+
         return data
 
-    def generate_signals(self, data):
-        # This function now returns the latest signal from a pre-calculated frame
+    def generate_signals(self, data, indicators=['rsi', 'z_score', 'std_dev']):
         if 'signal' not in data.columns:
-            data = self.calculate_all_signals(data)
+            data = self.calculate_all_signals(data, indicators)
 
         if not data.empty:
             return data['signal'].iloc[-1]
         return 'HOLD'
 
-    def calculate_all_signals(self, data):
+    def calculate_all_signals(self, data, indicators=['rsi', 'z_score', 'std_dev']):
         data = self.calculate_indicators(data)
 
-        # Conditions for buy and sell signals
-        buy_conditions = (
-            (data['z_score'] < -2) &
-            (data['rsi'] < self.rsi_oversold) &
-            (data['close'] < data[f'KCLe_{self.keltner_period}_{self.keltner_multiplier}']) &
-            (data['close'] < data['lower_std_dev'])
-        )
-        sell_conditions = (
-            (data['z_score'] > 2) &
-            (data['rsi'] > self.rsi_overbought) &
-            (data['close'] > data[f'KCUe_{self.keltner_period}_{self.keltner_multiplier}']) &
-            (data['close'] > data['upper_std_dev'])
-        )
+        buy_conditions = []
+        sell_conditions = []
 
-        # Generate signals
+        if 'rsi' in indicators:
+            buy_conditions.append(data['rsi'] < self.rsi_oversold)
+            sell_conditions.append(data['rsi'] > self.rsi_overbought)
+        if 'z_score' in indicators:
+            buy_conditions.append(data['z_score'] < -2)
+            sell_conditions.append(data['z_score'] > 2)
+        if 'std_dev' in indicators:
+            buy_conditions.append(data['close'] < data['lower_std_dev'])
+            sell_conditions.append(data['close'] > data['upper_std_dev'])
+
+        # Trigger if at least two conditions are met
+        buy_signal = sum(buy_conditions) >= 2
+        sell_signal = sum(sell_conditions) >= 2
+
         data['signal'] = 'HOLD'
-        data.loc[buy_conditions, 'signal'] = 'BUY'
-        data.loc[sell_conditions, 'signal'] = 'SELL'
+        if buy_signal:
+            data.loc[data.index[-1], 'signal'] = 'BUY'
+        elif sell_signal:
+            data.loc[data.index[-1], 'signal'] = 'SELL'
 
         return data
 
@@ -70,7 +87,11 @@ class MeanReversionStrategy:
         else:
             return 2 * atr_value
 
-    def get_exit_signal(self, current_price, ema, trade_direction):
+    def get_exit_signal(self, current_price, ema, trade_direction, z_score):
+        # Profit taking when z-score is 0
+        if z_score is not None and abs(z_score) < 0.1: # Using a small threshold around 0
+            return True
+        # Original exit condition
         if trade_direction == 'BUY' and current_price >= ema:
             return True
         elif trade_direction == 'SELL' and current_price <= ema:
