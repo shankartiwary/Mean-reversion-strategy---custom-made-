@@ -1,0 +1,7 @@
+smartapi-python
+pandas
+numpy
+pandas-ta
+pyotp
+logzero
+websocket-client
